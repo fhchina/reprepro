@@ -348,9 +348,11 @@ retvalue package_remove_by_cursor(struct package_cursor *tc, struct logger *logg
 	return result;
 }
 
-static retvalue archive_package(struct target *target, const char *packagename, const char *controlchunk, const char *version, const struct strlist *files, /*@null@*/struct trackingdata *trackingdata, /*@null@*/const char *causingrule, /*@null@*/const char *suitefrom) {
+static retvalue archive_package(struct target *target, const char *packagename, const char *controlchunk, const char *version, const struct strlist *files, /*@null@*/const char *sourcename, /*@null@*/const char *causingrule, /*@null@*/const char *suitefrom) {
 	struct strlist filekeys;
 	struct target *archive_target;
+	struct trackingdata trackingdata;
+	trackingdb tracks = NULL;
 	bool close_database;
 	retvalue result, r;
 
@@ -381,18 +383,32 @@ static retvalue archive_package(struct target *target, const char *packagename, 
 					return result;
 				files = &filekeys;
 			}
+			if (archive_target->distribution->tracking != dt_NONE) {
+				r = tracking_initialize(&tracks, archive_target->distribution, false);
+				if (RET_WAS_ERROR(r))
+					return r;
+				r = trackingdata_summon(tracks, sourcename, version, &trackingdata);
+				if (RET_WAS_ERROR(r))
+					return r;
+			}
 			// TODO: Check whether this is the best place to set 'selected'
 			target->distribution->archive->selected = true;
 			result = distribution_prepareforwriting(archive_target->distribution);
 			if (!RET_WAS_ERROR(result)) {
 				result = target_addpackage(archive_target, target->distribution->archive->logger,
 					              packagename, version, controlchunk,
-					              files, false, trackingdata,
+					              files, false, (tracks != NULL) ? &trackingdata : NULL,
 					              target->architecture, causingrule, suitefrom, NULL);
 				RET_UPDATE(target->distribution->archive->status, result);
 			}
 			if (close_database) {
 				r = target_closepackagesdb(archive_target);
+				RET_UPDATE(result, r);
+			}
+			if (tracks != NULL) {
+				r = trackingdata_finish(tracks, &trackingdata);
+				RET_UPDATE(result, r);
+				r = tracking_done(tracks);
 				RET_UPDATE(result, r);
 			}
 			if (RET_WAS_ERROR(result)) {
@@ -442,7 +458,7 @@ static retvalue addpackages(struct target *target, const char *packagename, cons
 				strlist_done(oldfiles);
 			return result;
 		}
-		r = archive_package(target, packagename, oldcontrolchunk, oldversion, oldfiles, trackingdata, causingrule, suitefrom);
+		r = archive_package(target, packagename, oldcontrolchunk, oldversion, oldfiles, oldsource, causingrule, suitefrom);
 		if (RET_WAS_ERROR(r)) {
 			if (oldfiles != NULL)
 				strlist_done(oldfiles);
@@ -642,7 +658,7 @@ retvalue target_addpackage(struct target *target, struct logger *logger, const c
 			if (RET_WAS_ERROR(r2))
 				continue;
 			r2 = archive_package(target, iterator.current.name, iterator.current.control,
-				                 iterator.current.version, NULL, trackingdata,
+				                 iterator.current.version, NULL, iterator.current.source,
 				                 causingrule, suitefrom);
 			RET_UPDATE(r, r2);
 			if (RET_WAS_ERROR(r2))
