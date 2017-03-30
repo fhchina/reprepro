@@ -451,13 +451,13 @@ static retvalue addpackages(struct target *target, const char *packagename, cons
 	/* Add package to the distribution's database */
 	if (oldcontrolchunk != NULL) {
 		key = package_primarykey(packagename, oldversion);
-		r = table_deleterecord(table, key, false);
-		free(key);
+		r = archive_package(target, packagename, oldcontrolchunk, oldversion, oldfiles, oldsource, causingrule, suitefrom);
 		RET_UPDATE(result, r);
 		if (RET_IS_OK(r)) {
-			r = archive_package(target, packagename, oldcontrolchunk, oldversion, oldfiles, oldsource, causingrule, suitefrom);
+			r = table_deleterecord(table, key, false);
 			RET_UPDATE(result, r);
 		}
+		free(key);
 	}
 
 	key = package_primarykey(packagename, version);
