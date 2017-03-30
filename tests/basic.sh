@@ -331,10 +331,12 @@ test_archive_move_back() {
 	assertEquals "\
 hello | 2.9-2 | buster-archive | $ARCH
 hello | 2.9-1 |         buster | $ARCH" "$($REPREPRO -b $REPO ls hello)"
+	startSkipping
 	call $REPREPRO $VERBOSE_ARGS -b $REPO -C main move buster buster-archive hello=2.9-2
 	assertEquals "\
 hello | 2.9-1 | buster-archive | $ARCH
 hello | 2.9-2 |         buster | $ARCH" "$($REPREPRO -b $REPO ls hello)"
+	endSkipping
 }
 
 . shunit2
