@@ -421,7 +421,7 @@ static retvalue archive_package(struct target *target, const char *packagename, 
 
 static retvalue addpackages(struct target *target, const char *packagename, const char *controlchunk, /*@null@*/const char *oldcontrolchunk, const char *version, /*@null@*/const char *oldversion, const struct strlist *files, /*@only@*//*@null@*/struct strlist *oldfiles, /*@null@*/struct logger *logger, /*@null@*/struct trackingdata *trackingdata, architecture_t architecture, /*@null@*/const char *oldsource, /*@null@*/const char *oldsversion, /*@null@*/const char *causingrule, /*@null@*/const char *suitefrom) {
 
-	retvalue result, r;
+	retvalue result = RET_OK, r;
 	char *key;
 	struct table *table = target->packages;
 	enum filetype filetype;
@@ -451,34 +451,28 @@ static retvalue addpackages(struct target *target, const char *packagename, cons
 	/* Add package to the distribution's database */
 	if (oldcontrolchunk != NULL) {
 		key = package_primarykey(packagename, oldversion);
-		result = table_deleterecord(table, key, false);
+		r = table_deleterecord(table, key, false);
 		free(key);
-		if (RET_WAS_ERROR(result)) {
-			if (oldfiles != NULL)
-				strlist_done(oldfiles);
-			return result;
-		}
-		r = archive_package(target, packagename, oldcontrolchunk, oldversion, oldfiles, oldsource, causingrule, suitefrom);
-		if (RET_WAS_ERROR(r)) {
-			if (oldfiles != NULL)
-				strlist_done(oldfiles);
-			return r;
+		RET_UPDATE(result, r);
+		if (RET_IS_OK(r)) {
+			r = archive_package(target, packagename, oldcontrolchunk, oldversion, oldfiles, oldsource, causingrule, suitefrom);
+			RET_UPDATE(result, r);
 		}
 	}
 
 	key = package_primarykey(packagename, version);
 	if (oldcontrolchunk != NULL && strcmp(version, oldversion) == 0) {
-		result = table_replacerecord(table, key, controlchunk);
+		r = table_replacerecord(table, key, controlchunk);
 
 	} else {
-		result = table_adduniqrecord(table, key, controlchunk);
+		r = table_adduniqrecord(table, key, controlchunk);
 	}
 	free(key);
 
-	if (RET_WAS_ERROR(result)) {
+	if (RET_WAS_ERROR(r)) {
 		if (oldfiles != NULL)
 			strlist_done(oldfiles);
-		return result;
+		return r;
 	}
 
 	if (logger != NULL)
