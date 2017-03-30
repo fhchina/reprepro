@@ -292,18 +292,32 @@ static retvalue package_add(struct distribution *into, /*@null@*/trackingdb trac
 			NULL, from != NULL ? from->codename : NULL, NULL);
 	RET_UPDATE(into->status, r);
 
-	if (remove_source) {
-		r = target_removepackage(fromtarget,
-				from->logger,
-				package->name, package->version,
-				(tracks != NULL) ? &trackingdata : NULL);
-		RET_UPDATE(from->status, r);
-	}
 	if (tracks != NULL) {
 		retvalue r2;
 
 		r2 = trackingdata_finish(tracks, &trackingdata);
 		RET_ENDUPDATE(r, r2);
+	}
+
+	// FIXME: result
+	if (remove_source) {
+		if (fromtracks != NULL) {
+			r = trackingdata_summon(fromtracks, package->sourcename,
+					package->version, &trackingdata);
+			if (RET_WAS_ERROR(r))
+				return r;
+		}
+		r = target_removepackage(fromtarget,
+				from->logger,
+				package->name, package->version,
+				(tracks != NULL) ? &trackingdata : NULL);
+		RET_UPDATE(from->status, r);
+		if (fromtracks != NULL) {
+			retvalue r2;
+
+			r2 = trackingdata_finish(fromtracks, &trackingdata);
+			RET_ENDUPDATE(r, r2);
+		}
 	}
 	return r;
 }
@@ -334,6 +348,12 @@ static retvalue packagelist_add(struct distribution *into, const struct package_
 			return r;
 	} else
 		tracks = NULL;
+
+	if (from->tracking != dt_NONE) {
+		r = tracking_initialize(&fromtracks, from, false);
+		if (RET_WAS_ERROR(r))
+			return r;
+	}
 
 	result = RET_NOTHING;
 	for (tpl = list->targets; tpl != NULL ; tpl = tpl->next) {
@@ -373,6 +393,8 @@ static retvalue packagelist_add(struct distribution *into, const struct package_
 		RET_UPDATE(into->status, r);
 		RET_ENDUPDATE(result, r);
 	}
+	r = tracking_done(fromtracks);
+	RET_ENDUPDATE(result, r);
 	r = tracking_done(tracks);
 	RET_ENDUPDATE(result, r);
 	return result;
